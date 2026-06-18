@@ -1,0 +1,988 @@
+<!DOCTYPE html>
+<html lang="ko" class="theme-dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Riot Esports 온톨로지 아키텍처</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/html-to-image@1.11.11/dist/html-to-image.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+  <script>if(typeof Chart !== 'undefined') Chart.defaults.animation = false;</script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root { interpolate-size: allow-keywords; }
+
+    html.theme-dark {
+      --bg: #07080f; --surface: #0f1117; --surface-hover: #161820;
+      --border: rgba(255,255,255,0.05);
+      --text: #EDEDED; --text-secondary: #777;
+      --accent: #00c2ff; --accent-secondary: #7c3aed;
+      --positive: #10b981; --negative: #f43f5e; --warning: #f59e0b;
+      --layer1: rgba(59,130,246,0.08); --layer1-border: rgba(59,130,246,0.25);
+      --layer2a: rgba(16,185,129,0.08); --layer2a-border: rgba(16,185,129,0.25);
+      --layer2b: rgba(139,92,246,0.08); --layer2b-border: rgba(139,92,246,0.3);
+      --layer3: rgba(245,158,11,0.08); --layer3-border: rgba(245,158,11,0.25);
+      --glow: rgba(0,194,255,0.12);
+    }
+    html.theme-light {
+      --bg: #f0f4f8; --surface: #ffffff; --surface-hover: #f8fafc;
+      --border: rgba(0,0,0,0.07);
+      --text: #0f172a; --text-secondary: #64748b;
+      --accent: #2563eb; --accent-secondary: #7c3aed;
+      --positive: #059669; --negative: #e11d48; --warning: #d97706;
+      --layer1: rgba(59,130,246,0.06); --layer1-border: rgba(59,130,246,0.2);
+      --layer2a: rgba(16,185,129,0.06); --layer2a-border: rgba(16,185,129,0.2);
+      --layer2b: rgba(139,92,246,0.06); --layer2b-border: rgba(139,92,246,0.2);
+      --layer3: rgba(245,158,11,0.06); --layer3-border: rgba(245,158,11,0.2);
+      --glow: rgba(37,99,235,0.06);
+    }
+
+    body {
+      font-family: 'Noto Sans KR', 'Inter', sans-serif;
+      background: var(--bg); color: var(--text);
+      line-height: 1.6; -webkit-font-smoothing: antialiased;
+      transition: background 0.3s, color 0.3s;
+    }
+
+    h1 { font-size: 2.5rem; font-weight: 700; letter-spacing: -0.03em; }
+    h2 { font-size: 2rem; font-weight: 600; letter-spacing: -0.02em; }
+    h3 { font-size: 1.5rem; font-weight: 600; }
+
+    @keyframes fadeInUp { from { opacity:0; transform:translateY(20px); } to { opacity:1; transform:translateY(0); } }
+    @keyframes fadeIn { from { opacity:0; } to { opacity:1; } }
+    @keyframes pulse { 0%,100% { opacity:0.4; } 50% { opacity:1; } }
+    @keyframes flowRight { 0% { stroke-dashoffset: 24; } 100% { stroke-dashoffset: 0; } }
+
+    .animate { animation: fadeInUp 0.6s ease-out both; }
+    .delay-1 { animation-delay: 0.1s; } .delay-2 { animation-delay: 0.2s; }
+    .delay-3 { animation-delay: 0.3s; } .delay-4 { animation-delay: 0.4s; }
+    .delay-5 { animation-delay: 0.5s; } .delay-6 { animation-delay: 0.6s; }
+
+    .reveal { opacity: 0; transform: translateY(24px); transition: opacity 0.6s ease, transform 0.6s ease; }
+    .reveal.visible { opacity: 1; transform: translateY(0); }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation: none !important; transition: none !important; }
+      .reveal { opacity:1; transform:none; }
+    }
+
+    @media print {
+      body { background: white !important; color: black !important; }
+      .viz-menu { display: none; }
+    }
+
+    /* MENU */
+    .viz-menu { position: fixed; top: 16px; right: 16px; z-index: 9999; }
+    .viz-menu-toggle {
+      width: 44px; height: 44px; border-radius: 12px;
+      background: var(--surface); border: 1px solid var(--border);
+      color: var(--text); cursor: pointer; display: flex;
+      align-items: center; justify-content: center;
+      backdrop-filter: blur(12px); transition: all 0.2s;
+    }
+    .viz-menu-toggle:hover { background: var(--surface-hover); }
+    .viz-menu-dropdown {
+      position: absolute; top: 52px; right: 0; min-width: 200px;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 12px; padding: 8px;
+      opacity: 0; visibility: hidden; transform: translateY(-8px);
+      transition: all 0.2s; backdrop-filter: blur(16px);
+    }
+    .viz-menu-dropdown.open { opacity: 1; visibility: visible; transform: translateY(0); }
+    .viz-menu-dropdown button {
+      width: 100%; padding: 10px 14px; border: none; border-radius: 8px;
+      background: transparent; color: var(--text); font-size: 14px;
+      font-family: inherit; cursor: pointer; text-align: left;
+      display: flex; align-items: center; gap: 10px; transition: background 0.15s;
+    }
+    .viz-menu-dropdown button:hover { background: var(--surface-hover); }
+
+    /* LAYOUT */
+    .container { max-width: 1280px; margin: 0 auto; padding: 48px 32px 80px; }
+
+    /* HERO */
+    .hero {
+      text-align: center; padding: 60px 0 48px;
+      background: radial-gradient(ellipse 80% 400px at 50% -100px, var(--glow), transparent);
+    }
+    .hero-badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 4px 12px; border-radius: 20px;
+      background: var(--surface); border: 1px solid var(--border);
+      font-size: 12px; color: var(--text-secondary); margin-bottom: 20px;
+      font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase;
+    }
+    .hero h1 { margin-bottom: 12px; }
+    .hero p { color: var(--text-secondary); font-size: 1rem; max-width: 560px; margin: 0 auto 32px; }
+
+    /* GOAL CARDS */
+    .goals-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 64px; }
+    .goal-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 12px; padding: 20px 24px;
+      transition: box-shadow 0.2s; cursor: default;
+    }
+    .goal-card:hover { box-shadow: 0 0 0 1px var(--border), 0 8px 24px rgba(0,0,0,0.12); }
+    .goal-num { font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 6px; }
+    .goal-card h3 { font-size: 1rem; font-weight: 600; margin-bottom: 6px; }
+    .goal-card p { font-size: 13px; color: var(--text-secondary); line-height: 1.5; }
+
+    /* LAYER SECTIONS */
+    .arch-section { margin-bottom: 20px; }
+    .layer-block {
+      border-radius: 16px; padding: 24px 28px;
+      transition: all 0.2s;
+    }
+    .layer-block.l1 { background: var(--layer1); border: 1px solid var(--layer1-border); }
+    .layer-block.l2a { background: var(--layer2a); border: 1px solid var(--layer2a-border); }
+    .layer-block.l2b { background: var(--layer2b); border: 1px solid var(--layer2b-border); }
+    .layer-block.l3 { background: var(--layer3); border: 1px solid var(--layer3-border); }
+    .layer-block.datasrc { background: var(--surface); border: 1px solid var(--border); }
+    .layer-block.ingestion { background: var(--surface); border: 1px solid var(--border); }
+
+    .layer-header { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
+    .layer-badge {
+      font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
+      padding: 3px 10px; border-radius: 6px;
+    }
+    .badge-l1 { background: rgba(59,130,246,0.18); color: #60a5fa; }
+    .badge-l2a { background: rgba(16,185,129,0.18); color: #34d399; }
+    .badge-l2b { background: rgba(139,92,246,0.18); color: #a78bfa; }
+    .badge-l3 { background: rgba(245,158,11,0.18); color: #fbbf24; }
+    .badge-src { background: rgba(255,255,255,0.06); color: var(--text-secondary); }
+    .badge-ing { background: rgba(255,255,255,0.06); color: var(--text-secondary); }
+    html.theme-light .badge-src { background: rgba(0,0,0,0.06); }
+    html.theme-light .badge-ing { background: rgba(0,0,0,0.06); }
+
+    .layer-title { font-size: 1rem; font-weight: 600; }
+    .layer-desc { font-size: 12px; color: var(--text-secondary); margin-left: auto; }
+
+    /* SERVICE NODES */
+    .nodes-row { display: flex; gap: 12px; flex-wrap: wrap; }
+    .node {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; padding: 12px 16px;
+      display: flex; align-items: center; gap: 10px;
+      cursor: pointer; transition: all 0.2s; flex: 1; min-width: 160px;
+    }
+    .node:hover { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), 0 4px 12px rgba(0,0,0,0.15); }
+    .node.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+    .node-icon {
+      width: 36px; height: 36px; border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; font-size: 16px;
+    }
+    .node-info { min-width: 0; }
+    .node-name { font-size: 13px; font-weight: 600; white-space: nowrap; }
+    .node-sub { font-size: 11px; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+    /* ARROW */
+    .flow-arrow {
+      display: flex; align-items: center; justify-content: center;
+      height: 28px; color: var(--text-secondary); font-size: 18px;
+      margin: 4px 0;
+    }
+    .flow-arrow svg { animation: none; }
+
+    /* DETAIL PANEL */
+    .detail-panel {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 16px; padding: 28px; margin-top: 24px;
+      transition: all 0.3s ease; overflow: hidden;
+    }
+    .detail-panel.hidden { display: none; }
+    .detail-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+    .detail-title { font-size: 1.1rem; font-weight: 700; }
+    .detail-close { background: none; border: none; color: var(--text-secondary); cursor: pointer; padding: 4px; font-size: 18px; }
+    .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .detail-item label { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-secondary); display: block; margin-bottom: 4px; }
+    .detail-item p { font-size: 13px; line-height: 1.5; }
+    .detail-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+    .detail-tag {
+      font-size: 11px; padding: 3px 10px; border-radius: 20px;
+      background: var(--surface-hover); border: 1px solid var(--border); color: var(--text-secondary);
+    }
+
+    /* VECTOR DETAIL */
+    .vector-visual {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 16px;
+    }
+    .vv-card {
+      background: var(--surface-hover); border-radius: 10px; padding: 14px;
+      border: 1px solid var(--border);
+    }
+    .vv-card .vv-title { font-size: 12px; font-weight: 600; margin-bottom: 6px; color: var(--accent-secondary); }
+    .vv-card .vv-dim { font-size: 22px; font-weight: 800; color: var(--text); letter-spacing: -0.03em; }
+    .vv-card .vv-label { font-size: 11px; color: var(--text-secondary); }
+
+    /* WIN PROBABILITY CHART */
+    .chart-section { margin-top: 48px; }
+    .chart-section h2 { font-size: 1.3rem; margin-bottom: 6px; }
+    .chart-section .sub { font-size: 13px; color: var(--text-secondary); margin-bottom: 20px; }
+    .charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    .chart-wrap {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 12px; padding: 24px;
+    }
+    .chart-wrap h3 { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
+    .chart-wrap .chart-sub { font-size: 12px; color: var(--text-secondary); margin-bottom: 16px; }
+    .chart-container { height: 220px; position: relative; }
+
+    /* ACCURACY STATS */
+    .acc-row { display: flex; gap: 16px; margin-bottom: 20px; }
+    .acc-card {
+      flex: 1; background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; padding: 16px 20px; text-align: center;
+    }
+    .acc-val { font-size: 2rem; font-weight: 800; letter-spacing: -0.04em; }
+    .acc-label { font-size: 11px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.06em; margin-top: 2px; }
+    .acc-time { font-size: 10px; color: var(--text-secondary); margin-top: 4px; }
+
+    /* COMPARISON TABLE */
+    .compare-section { margin-top: 48px; }
+    .compare-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .compare-table th {
+      text-align: left; padding: 10px 16px; font-size: 11px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-secondary);
+      border-bottom: 1px solid var(--border);
+    }
+    .compare-table td { padding: 12px 16px; border-bottom: 1px solid var(--border); }
+    .compare-table tr:last-child td { border-bottom: none; }
+    .compare-table tr:hover td { background: var(--surface-hover); }
+    .tag-check { color: var(--positive); font-weight: 600; }
+    .tag-cross { color: var(--text-secondary); }
+    .highlight-row td { font-weight: 600; }
+
+    /* MOBILE */
+    @media (max-width: 768px) {
+      .goals-grid { grid-template-columns: 1fr; }
+      .charts-grid { grid-template-columns: 1fr; }
+      .detail-grid { grid-template-columns: 1fr; }
+      .vector-visual { grid-template-columns: 1fr 1fr; }
+      h1 { font-size: 1.8rem; }
+    }
+    @media (max-width: 375px) {
+      body { overflow-x: hidden; }
+      .container { padding: 24px 16px 60px; }
+      .nodes-row { flex-direction: column; }
+      .vector-visual { grid-template-columns: 1fr; }
+      .acc-row { flex-wrap: wrap; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- MENU -->
+  <div class="viz-menu">
+    <button class="viz-menu-toggle" onclick="toggleMenu()" aria-label="Menu">
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+        <line x1="3" y1="5" x2="17" y2="5"/><line x1="3" y1="10" x2="17" y2="10"/><line x1="3" y1="15" x2="17" y2="15"/>
+      </svg>
+    </button>
+    <div class="viz-menu-dropdown" id="vizMenuDropdown">
+      <button onclick="cycleTheme()"><span id="themeIcon">🌙</span><span id="themeLabel">Dark</span></button>
+      <button onclick="downloadImage()"><span>📥</span><span>Download PNG</span></button>
+      <button onclick="window.print()"><span>🖨️</span><span>Print / PDF</span></button>
+    </div>
+  </div>
+
+  <a href="#main-content" style="position:absolute;left:-9999px;" onfocus="this.style.cssText='position:fixed;left:16px;top:16px;z-index:10000;padding:8px 16px;background:var(--accent);color:white;text-decoration:none;border-radius:4px;'" onblur="this.style.cssText='position:absolute;left:-9999px;'">Skip to content</a>
+
+  <main id="main-content" role="main">
+    <div class="container">
+
+      <!-- HERO -->
+      <section class="hero animate">
+        <div class="hero-badge">
+          <svg width="10" height="10" viewBox="0 0 10 10" fill="var(--accent)"><circle cx="5" cy="5" r="5"/></svg>
+          Gate A 완료 · 2026-04-30
+        </div>
+        <h1>Riot Esports 온톨로지 아키텍처</h1>
+        <p>실시간 경기 맥락 온톨로지 · 한타 예측 · 승부 예측 · 유저 수준별 해설 생성</p>
+      </section>
+
+      <!-- GOALS -->
+      <section aria-label="프로젝트 목표">
+        <div class="goals-grid">
+          <div class="goal-card animate delay-1">
+            <div class="goal-num" style="color:#00c2ff;">01 · Primary</div>
+            <h3>한타 사전 감지</h3>
+            <p>발생 전 관전 시점·관전 포인트 자동 포착. Rule-based + LSTM + pgvectorscale 앙상블.</p>
+          </div>
+          <div class="goal-card animate delay-2">
+            <div class="goal-num" style="color:#a78bfa;">02 · Secondary</div>
+            <h3>유저별 딥다이브 해설</h3>
+            <p>한타 종료 후 Casual → Analyst 4단계 수준별 해설. Bedrock + RAG 파이프라인.</p>
+          </div>
+          <div class="goal-card animate delay-3">
+            <div class="goal-num" style="color:#34d399;">03 · Extended</div>
+            <h3>승부 예측 3단계</h3>
+            <p>Pre-game 구성 예측 · 인게임 Win Probability · 한타 결과 예측. 재사용 인프라.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ARCHITECTURE -->
+      <section aria-label="시스템 아키텍처" data-reveal>
+
+        <!-- DATA SOURCES -->
+        <div class="arch-section">
+          <div class="layer-block datasrc">
+            <div class="layer-header">
+              <span class="layer-badge badge-src">Data Sources</span>
+              <span class="layer-title">Riot API 데이터 소스</span>
+              <span class="layer-desc">외부 데이터 수집 엔드포인트</span>
+            </div>
+            <div class="nodes-row">
+              <div class="node" onclick="showDetail('esports-api')" id="node-esports-api" role="button" aria-label="Riot Esports Data API 상세보기">
+                <div class="node-icon" style="background:rgba(229,70,70,0.15);">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+                </div>
+                <div class="node-info">
+                  <div class="node-name">Esports Data API</div>
+                  <div class="node-sub">riotesportsdata.com</div>
+                </div>
+              </div>
+              <div class="node" onclick="showDetail('live-stats-api')" id="node-live-stats-api" role="button" aria-label="Riot Live Stats API 상세보기">
+                <div class="node-icon" style="background:rgba(59,130,246,0.15);">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                </div>
+                <div class="node-info">
+                  <div class="node-name">Live Stats API</div>
+                  <div class="node-sub">rfc190 · 1초 스트림 (LOLTMNT03)</div>
+                </div>
+              </div>
+              <div class="node" onclick="showDetail('match-v5')" id="node-match-v5" role="button" aria-label="Match-v5 Timeline API 상세보기">
+                <div class="node-icon" style="background:rgba(16,185,129,0.15);">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
+                </div>
+                <div class="node-info">
+                  <div class="node-name">Match-v5 Timeline</div>
+                  <div class="node-sub">히스토리컬 백필 · 학습 데이터</div>
+                </div>
+              </div>
+              <div class="node" onclick="showDetail('data-dragon')" id="node-data-dragon" role="button" aria-label="Data Dragon 상세보기">
+                <div class="node-icon" style="background:rgba(245,158,11,0.15);">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+                </div>
+                <div class="node-info">
+                  <div class="node-name">Data Dragon</div>
+                  <div class="node-sub">챔피언·아이템 정적 메타</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="flow-arrow">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--text-secondary)" stroke-width="1.5"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
+        </div>
+
+        <!-- INGESTION -->
+        <div class="arch-section">
+          <div class="layer-block ingestion">
+            <div class="layer-header">
+              <span class="layer-badge badge-ing">Ingestion</span>
+              <span class="layer-title">AWS 수집 레이어</span>
+              <span class="layer-desc">1초 폴링 / 이벤트 기반</span>
+            </div>
+            <div class="nodes-row">
+              <div class="node" onclick="showDetail('api-gateway')" id="node-api-gateway" role="button">
+                <div class="node-icon" style="background:rgba(99,102,241,0.15);">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#818cf8" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+                </div>
+                <div class="node-info">
+                  <div class="node-name">API Gateway</div>
+                  <div class="node-sub">+ Lambda Ingestion</div>
+                </div>
+              </div>
+              <div class="node" onclick="showDetail('kinesis')" id="node-kinesis" role="button">
+                <div class="node-icon" style="background:rgba(239,68,68,0.15);">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f87171" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                </div>
+                <div class="node-info">
+                  <div class="node-name">Kinesis Data Streams</div>
+                  <div class="node-sub">실시간 이벤트 버스</div>
+                </div>
+              </div>
+              <div class="node" onclick="showDetail('lambda-parser')" id="node-lambda-parser" role="button">
+                <div class="node-icon" style="background:rgba(251,146,60,0.15);">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fb923c" stroke-width="2"><path d="m18 16 4-4-4-4"/><path d="m6 8-4 4 4 4"/><path d="m14.5 4-5 16"/></svg>
+                </div>
+                <div class="node-info">
+                  <div class="node-name">Lambda Parser</div>
+                  <div class="node-sub">이벤트 변환 + 벡터화</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="flow-arrow">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--text-secondary)" stroke-width="1.5"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
+        </div>
+
+        <!-- LAYER 1: Static Ontology -->
+        <div class="arch-section">
+          <div class="layer-block l1">
+            <div class="layer-header">
+              <span class="layer-badge badge-l1">Layer 1</span>
+              <span class="layer-title">정적 온톨로지</span>
+              <span class="layer-desc">Neo4j (로컬 → 서버 동일 스택)</span>
+            </div>
+            <div class="nodes-row">
+              <div class="node" onclick="showDetail('neptune')" id="node-neptune" role="button" aria-label="Neo4j 상세보기">
+                <div class="node-icon" style="background:rgba(59,130,246,0.2);">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="2"><circle cx="5" cy="5" r="2"/><circle cx="19" cy="5" r="2"/><circle cx="12" cy="19" r="2"/><path d="M7 5h10M6 7l5 10M18 7l-5 10"/></svg>
+                </div>
+                <div class="node-info">
+                  <div class="node-name">Neo4j</div>
+                  <div class="node-sub">챔피언·아이템·팀·선수 지식 그래프</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="flow-arrow">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--text-secondary)" stroke-width="1.5"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
+        </div>
+
+        <!-- LAYER 2A: TimescaleDB -->
+        <div class="arch-section">
+          <div class="layer-block l2a">
+            <div class="layer-header">
+              <span class="layer-badge badge-l2a">Layer 2A</span>
+              <span class="layer-title">동적 온톨로지 — 시계열</span>
+              <span class="layer-desc">TimescaleDB (PostgreSQL ext.)</span>
+            </div>
+            <div class="nodes-row">
+              <div class="node" onclick="showDetail('timescale')" id="node-timescale" role="button">
+                <div class="node-icon" style="background:rgba(16,185,129,0.2);">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+                </div>
+                <div class="node-info">
+                  <div class="node-name">TimescaleDB</div>
+                  <div class="node-sub">player_state · game_events · team_state · teamfight_events</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- LAYER 2B: pgvectorscale -->
+        <div class="arch-section" style="margin-top:12px;">
+          <div class="layer-block l2b">
+            <div class="layer-header">
+              <span class="layer-badge badge-l2b">Layer 2B</span>
+              <span class="layer-title">벡터 레이어 ← 동일 PostgreSQL 인스턴스</span>
+              <span class="layer-desc">pgvectorscale (StreamingDiskANN)</span>
+            </div>
+            <div class="nodes-row">
+              <div class="node" onclick="showDetail('pgvector')" id="node-pgvector" role="button">
+                <div class="node-icon" style="background:rgba(139,92,246,0.2);">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" stroke-width="2"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+                </div>
+                <div class="node-info">
+                  <div class="node-name">pgvectorscale</div>
+                  <div class="node-sub">게임 상태 · 구성 · 한타 임베딩 (StreamingDiskANN)</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="flow-arrow">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--text-secondary)" stroke-width="1.5"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
+        </div>
+
+        <!-- LAYER 3: Inference -->
+        <div class="arch-section">
+          <div class="layer-block l3">
+            <div class="layer-header">
+              <span class="layer-badge badge-l3">Layer 3</span>
+              <span class="layer-title">추론·생성 레이어</span>
+              <span class="layer-desc">SageMaker + Bedrock + EventBridge</span>
+            </div>
+            <div class="nodes-row">
+              <div class="node" onclick="showDetail('lstm')" id="node-lstm" role="button">
+                <div class="node-icon" style="background:rgba(245,158,11,0.2);">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2"><path d="M9.663 17h4.673M12 3v1m6.364 1.636-.707.707M21 12h-1M4 12H3M6.343 6.343l-.707-.707M10.121 18.364l-.707.707"/><circle cx="12" cy="12" r="4"/></svg>
+                </div>
+                <div class="node-info">
+                  <div class="node-name">SageMaker · LSTM</div>
+                  <div class="node-sub">한타 예측 (30초 슬라이딩)</div>
+                </div>
+              </div>
+              <div class="node" onclick="showDetail('lgbm')" id="node-lgbm" role="button">
+                <div class="node-icon" style="background:rgba(245,158,11,0.15);">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+                </div>
+                <div class="node-info">
+                  <div class="node-name">SageMaker · LightGBM</div>
+                  <div class="node-sub">인게임 Win Probability</div>
+                </div>
+              </div>
+              <div class="node" onclick="showDetail('xgboost')" id="node-xgboost" role="button">
+                <div class="node-icon" style="background:rgba(245,158,11,0.15);">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3z"/></svg>
+                </div>
+                <div class="node-info">
+                  <div class="node-name">SageMaker · XGBoost</div>
+                  <div class="node-sub">한타 결과 예측</div>
+                </div>
+              </div>
+              <div class="node" onclick="showDetail('bedrock')" id="node-bedrock" role="button">
+                <div class="node-icon" style="background:rgba(245,158,11,0.2);">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                </div>
+                <div class="node-info">
+                  <div class="node-name">Amazon Bedrock</div>
+                  <div class="node-sub">유저 수준별 해설 생성</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- DETAIL PANEL -->
+        <div class="detail-panel hidden" id="detailPanel">
+          <div class="detail-header">
+            <span class="detail-title" id="detailTitle"></span>
+            <button class="detail-close" onclick="closeDetail()" aria-label="닫기">✕</button>
+          </div>
+          <div id="detailBody"></div>
+        </div>
+
+      </section>
+
+      <!-- WIN PROBABILITY SECTION -->
+      <section class="chart-section" data-reveal>
+        <h2>Win Probability 모델 실측 결과</h2>
+        <p class="sub">LCK 2,000경기 / 51,283행 피처 기반 LightGBM+XGBoost 학습 결과 (EXP004 AUC = 0.8353) · GroupShuffleSplit 검증</p>
+
+        <div class="acc-row">
+          <div class="acc-card animate delay-1">
+            <div class="acc-val" style="color:var(--warning);" data-count="70" data-suffix="%">70%</div>
+            <div class="acc-label">Early Game AUC</div>
+            <div class="acc-time">0–10분 구간</div>
+          </div>
+          <div class="acc-card animate delay-2">
+            <div class="acc-val" style="color:var(--accent);" data-count="88" data-suffix="%">88%</div>
+            <div class="acc-label">Mid-Early AUC</div>
+            <div class="acc-time">10–20분 구간</div>
+          </div>
+          <div class="acc-card animate delay-3">
+            <div class="acc-val" style="color:var(--positive);" data-count="90" data-suffix="%">90%</div>
+            <div class="acc-label">Mid Game AUC</div>
+            <div class="acc-time">20–30분 구간</div>
+          </div>
+          <div class="acc-card animate delay-4">
+            <div class="acc-val" style="color:var(--positive);" data-count="89" data-suffix="%">89%</div>
+            <div class="acc-label">Late Game AUC</div>
+            <div class="acc-time">30분+ 구간</div>
+          </div>
+        </div>
+
+        <div class="charts-grid">
+          <div class="chart-wrap animate delay-2">
+            <h3>시간대별 AUC 실측</h3>
+            <p class="chart-sub">LCK 2,000경기 — EXP004 LightGBM+XGBoost (전체 AUC 0.8353)</p>
+            <div class="chart-container">
+              <canvas id="winProbChart" role="img" aria-label="게임 시간대별 승부예측 정확도 추이 차트"></canvas>
+            </div>
+          </div>
+          <div class="chart-wrap animate delay-3">
+            <h3>pgvectorscale 성능 비교</h3>
+            <p class="chart-sub">pgvector 대비 상대 성능 (ANN 검색 속도 / 메모리)</p>
+            <div class="chart-container">
+              <canvas id="vectorPerfChart" role="img" aria-label="pgvectorscale vs pgvector 성능 비교 차트"></canvas>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- COMPARISON TABLE -->
+      <section class="compare-section" data-reveal>
+        <h2 style="margin-bottom:20px; font-size:1.3rem;">DB 아키텍처 비교</h2>
+        <div style="overflow-x:auto;">
+          <table class="compare-table" role="table" aria-label="DB 아키텍처 비교표">
+            <thead>
+              <tr>
+                <th>항목</th>
+                <th>AWS 네이티브 (기존)</th>
+                <th style="color:var(--accent);">TimescaleDB + pgvectorscale (채택)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>시계열 저장</td>
+                <td>Amazon Timestream</td>
+                <td class="tag-check">TimescaleDB ✓</td>
+              </tr>
+              <tr>
+                <td>벡터 검색</td>
+                <td class="tag-cross">별도 Pinecone / OpenSearch 필요</td>
+                <td class="tag-check">pgvectorscale (동일 인스턴스) ✓</td>
+              </tr>
+              <tr>
+                <td>시계열 + 벡터 단일 쿼리</td>
+                <td class="tag-cross">불가 (ETL 필요)</td>
+                <td class="tag-check">SQL JOIN으로 직접 가능 ✓</td>
+              </tr>
+              <tr>
+                <td>ANN 검색 속도</td>
+                <td class="tag-cross">표준 pgvector 수준</td>
+                <td class="tag-check">pgvector 대비 약 23배 빠름 ✓</td>
+              </tr>
+              <tr>
+                <td>RAG 파이프라인</td>
+                <td class="tag-cross">복잡 (3개 서비스 연동)</td>
+                <td class="tag-check">단일 DB 내 검색 ✓</td>
+              </tr>
+              <tr>
+                <td>운영 복잡도</td>
+                <td class="tag-cross">높음 (Timestream + 벡터 DB + 동기화)</td>
+                <td class="tag-check">낮음 (단일 PostgreSQL 관리) ✓</td>
+              </tr>
+              <tr>
+                <td>비용</td>
+                <td class="tag-cross">Timestream + 별도 벡터 DB</td>
+                <td class="tag-check">Timescale Cloud 단일 과금 ✓</td>
+              </tr>
+              <tr>
+                <td>정적 그래프 (온톨로지)</td>
+                <td>Amazon Neptune</td>
+                <td>Neo4j (로컬 → 서버 동일 스택)</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+    </div>
+  </main>
+
+  <script>
+    // === MENU ===
+    function toggleMenu() {
+      var d = document.getElementById('vizMenuDropdown');
+      if (d) d.classList.toggle('open');
+    }
+    document.addEventListener('click', function(e) {
+      if (!e.target.closest('.viz-menu')) {
+        var d = document.getElementById('vizMenuDropdown');
+        if (d) d.classList.remove('open');
+      }
+    });
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') {
+        var d = document.getElementById('vizMenuDropdown');
+        if (d) d.classList.remove('open');
+      }
+    });
+
+    // === THEME ===
+    var savedTheme = localStorage.getItem('viz-theme');
+    var currentTheme = savedTheme || (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+    function applyTheme(t) {
+      document.documentElement.className = 'theme-' + t;
+      var icon = document.getElementById('themeIcon');
+      var label = document.getElementById('themeLabel');
+      if (icon) icon.textContent = t === 'dark' ? '🌙' : '☀️';
+      if (label) label.textContent = t === 'dark' ? 'Dark' : 'Light';
+      localStorage.setItem('viz-theme', t);
+      currentTheme = t;
+      if (typeof onThemeChange === 'function') onThemeChange();
+    }
+    function cycleTheme() { applyTheme(currentTheme === 'dark' ? 'light' : 'dark'); }
+    applyTheme(currentTheme);
+
+    // === SCROLL REVEAL ===
+    document.querySelectorAll('[data-reveal]').forEach(function(el) { el.classList.add('reveal'); });
+    var revealObs = new IntersectionObserver(function(entries) {
+      entries.forEach(function(e) { if (e.isIntersecting) { e.target.classList.add('visible'); revealObs.unobserve(e.target); } });
+    }, { threshold: 0.1 });
+    document.querySelectorAll('.reveal').forEach(function(el) { revealObs.observe(el); });
+
+    // === COUNTERS ===
+    function animateCounters() {
+      document.querySelectorAll('[data-count]').forEach(function(el) {
+        if (el.dataset.counted) return;
+        el.dataset.counted = '1';
+        var target = parseFloat(el.dataset.count), suffix = el.dataset.suffix || '';
+        var start = performance.now(), duration = 1400;
+        (function tick(now) {
+          var p = Math.min((now - start) / duration, 1), eased = 1 - Math.pow(1 - p, 3);
+          el.textContent = Math.round(target * eased) + suffix;
+          if (p < 1) requestAnimationFrame(tick);
+        })(start);
+      });
+    }
+    var counterEl = document.querySelector('[data-count]');
+    if (counterEl) {
+      var cObs = new IntersectionObserver(function(entries) {
+        entries.forEach(function(e) { if (e.isIntersecting) { animateCounters(); cObs.disconnect(); } });
+      }, { threshold: 0.3 });
+      cObs.observe(counterEl);
+    }
+
+    // === DOWNLOAD ===
+    async function downloadImage() {
+      var menu = document.querySelector('.viz-menu');
+      menu.style.display = 'none';
+      try {
+        var url = await htmlToImage.toPng(document.body, { quality: 1, pixelRatio: 2 });
+        var a = document.createElement('a'); a.href = url;
+        a.download = 'riot-esports-architecture.png'; a.click();
+      } catch(e) { console.error('Download failed:', e); }
+      menu.style.display = '';
+    }
+
+    // === NODE DETAIL DATA ===
+    var nodeDetails = {
+      'esports-api': {
+        title: 'Riot Esports Data API',
+        role: '데이터 소스',
+        desc: '공식 프로 경기 데이터 제공. 팀·선수·매치 이력·토너먼트 정보 포함.',
+        url: 'riotesportsdata.com',
+        usecase: '정적 온톨로지 구축, 선수 폼 지표, 팀 스타일 분석',
+        note: '프로 경기 접근은 Riot 파트너십 필요. 초기엔 솔로 랭크로 대체 가능.',
+        tags: ['공식 API', 'Pro Matches', 'Tournament Data']
+      },
+      'live-stats-api': {
+        title: 'Riot Esports Live Stats API',
+        role: '데이터 소스 · 실시간 스트림',
+        desc: '프로 경기 공식 Live Stats 피드 (rfc190 스코프). 1초 단위로 참가자 10명 전원의 위치·HP·쿨타임·골드 전달. LOLTMNT03 = LCK/LCK CL 프로덕션 서버.',
+        url: 'lolesports.aws-usw2-prod.loltmnt03.lolgame.livestats (rfc190)',
+        usecase: 'stats_update (1s 스냅샷), champion_kill, skill_used, item_purchased, epic_monster_kill, building_destroyed 이벤트 수집 → TimescaleDB 적재',
+        note: 'Riot Esports 공식 데이터 파트너(OGS, GRID) 경유 접근. statsUpdateInterval: 1000ms 확인됨.',
+        tags: ['rfc190', 'rfc461', '1s Stream', 'LOLTMNT03', 'Pro Only']
+      },
+      'match-v5': {
+        title: 'Match-v5 Timeline API',
+        role: '데이터 소스 · 히스토리컬 백필',
+        desc: '공식 Riot API. 과거 경기 타임라인 이벤트 전체 제공. team_state 시계열 및 EXP004 피처 생성의 원천.',
+        url: 'developer.riotgames.com/apis#match-v5',
+        usecase: '2,000경기 타임라인 캐시 수집 완료. replay_cached_matches.py로 team_state 106,566행 적재. features_winprob.parquet (51,283행) + frames_rich.parquet 생성.',
+        note: '캐시 기반 중복 스킵으로 안전 재실행 가능. 1분 간격 스냅샷 → 26~45 프레임/경기.',
+        tags: ['Historical', 'Match Timeline', '2000 Matches', 'Backfill Complete']
+      },
+      'data-dragon': {
+        title: 'Data Dragon',
+        role: '데이터 소스',
+        desc: '챔피언·아이템·스킬·룬 정적 메타데이터. 패치마다 버전 업데이트.',
+        url: 'ddragon.leagueoflegends.com',
+        usecase: '정적 온톨로지 초기 구축. Neo4j에 챔피언·아이템 노드 적재.',
+        note: 'S3에 패치별 버전 보관 후 ETL로 Neo4j 갱신.',
+        tags: ['Static Data', 'Patch-versioned', 'Champion Meta']
+      },
+      'timescale': {
+        title: 'TimescaleDB',
+        role: 'Layer 2A · 시계열 저장',
+        desc: 'PostgreSQL 확장. 하이퍼테이블로 시계열 자동 파티셔닝. pgvectorscale과 동일 인스턴스 공유. 로컬 Docker 컨테이너 lol-ontology-db 운영 중 (7일+ 업타임).',
+        url: 'timescale.com',
+        usecase: 'team_state (2,000경기 / 106,566행, win_prob·model_signal), teamfight_events (8,711건), canonical_games (541경기), composition_embeddings (1,572 nodes, PCA 64dim)',
+        note: 'Gate A 완료: team_state 전체 적재 완료. replay_cached_matches.py로 mock 재생 → DB 삽입. win_prob_swings.csv Top 50 추출 완료.',
+        tags: ['PostgreSQL', 'Hypertable', '2000 Matches', '106K Rows', 'Gate A Done']
+      },
+      'pgvector': {
+        title: 'pgvectorscale',
+        role: 'Layer 2B · 벡터 검색',
+        desc: 'StreamingDiskANN 인덱스 + SBQ. pgvector 대비 23배 빠른 ANN 검색, 메모리 1/10.',
+        url: 'github.com/timescale/pgvectorscale',
+        usecase: '게임 상태 임베딩(128dim), 챔피언 구성 벡터(64dim), 한타 컨텍스트 벡터',
+        note: '시계열 + 벡터를 단일 SQL JOIN으로 검색 → RAG 파이프라인 단순화.',
+        tags: ['StreamingDiskANN', 'ANN Search', '128-dim', 'RAG']
+      },
+      'neptune': {
+        title: 'Neo4j',
+        role: 'Layer 1 · 정적 온톨로지',
+        desc: '챔피언·스킬·아이템·선수·팀 관계를 Property Graph(Cypher)로 모델링. 로컬 Neo4j Desktop(bolt://localhost:7687)으로 개발 중, 동일 스택으로 서버 배포 예정.',
+        url: 'neo4j.com',
+        usecase: 'COUNTERS, SYNERGIZES_WITH, CHAINS_WITH, MAINS, MEMBER_OF 관계 탐색. 172 챔피언, 114 프로 선수(LCK), 8개 리전 적재 완료.',
+        note: '패치마다 ETL로 갱신, 경기 중 불변. Layer 3 Bedrock RAG가 온톨로지 파생 피처 참조.',
+        tags: ['Property Graph', 'Cypher', 'Knowledge Graph', 'Neo4j', '172 Champions']
+      },
+      'lstm': {
+        title: 'SageMaker · LSTM (한타 예측)',
+        role: 'Layer 3 · 한타 감지',
+        desc: '현재: 룰 기반(2인 집결 1000유닛 이내 + 오브젝트 근접 + 10초 내 와드 파괴 2개) + model_signal 앙상블. 목표: 30초 슬라이딩 윈도우 LSTM으로 60초 내 한타 확률 예측.',
+        url: 'aws.amazon.com/sagemaker (프로덕션 목표)',
+        usecase: 'rule_score + model_signal 함께 출력 → 해석 가능 알림. P(teamfight) > 0.75 → EventBridge 트리거 → 관전 포인트 알림 (프로덕션 목표)',
+        note: '로컬 프로토타입에서 live_stats_receiver.py가 rule_score·model_signal 동시 계산 검증 완료. false positive 제어는 임계값 조정.',
+        tags: ['Rule-based', 'LSTM (목표)', 'model_signal', 'Teamfight Detection']
+      },
+      'lgbm': {
+        title: 'LightGBM + XGBoost · Win Probability',
+        role: 'Layer 3 · Win Probability',
+        desc: 'EXP004: 2,000경기 / 51,283행 학습. baseline 9 피처 + rich 7 피처(HP%, 데미지 비율, 와드, 킬관여) = 16 피처. WinProbPredictor가 XGBoost .ubj 우선 로드, 실패 시 LightGBM .pkl 폴백.',
+        url: 'aws.amazon.com/sagemaker (프로덕션 목표)',
+        usecase: '시간대별 AUC: 0–10분 0.70 / 10–20분 0.877 / 20–30분 0.904 / 30분+ 0.885. ECE 0.0269 (EXP006 기준). team_state.win_prob 전체 2,000경기 적재 완료.',
+        note: 'EXP004 전체 AUC = 0.8353. 0–10분 초반 구간이 병목. EXP006 새 피처(gold_per_min, kill_tower_interaction 등) 실험 완료. AUC 0.85 목표는 더 많은 데이터 또는 팀파이트 피드백 연동 필요.',
+        tags: ['LightGBM', 'XGBoost', 'AUC 0.8353', 'EXP004', '2000 Matches', 'Gate A Done']
+      },
+      'xgboost': {
+        title: 'XGBoost · Teamfight Outcome (EXP-TF-001)',
+        role: 'Layer 3 · Teamfight Outcome',
+        desc: '한타 시작 직전 상태로 이번 한타 결과 예측. 이진 분류. 8,711건 한타 이벤트로 학습 완료.',
+        url: 'aws.amazon.com/sagemaker (프로덕션 목표)',
+        usecase: 'Accuracy 83.4% / AUC 0.91. 피처 중요도: gold_diff 0.285 > level_diff+hp_diff 0.373. teamfight_outcome_model.ubj 로컬 운영 중.',
+        note: 'TeamfightDetector rule_score + model_signal 앙상블. FightWindow 감지 후 on_frame() 내 실시간 추론. 한타 직후 win_prob_swing 계산 → 경기 결정 한타 TOP 산출.',
+        tags: ['XGBoost', 'Acc 83.4%', 'AUC 0.91', 'EXP-TF-001', '8711 Fights', 'Gate A Done']
+      },
+      'bedrock': {
+        title: 'Amazon Bedrock',
+        role: 'Layer 3 · 해설 생성',
+        desc: '유저 수준별 4단계 해설 생성. pgvectorscale RAG로 유사 한타 레퍼런스 검색 후 프롬프트에 주입.',
+        url: 'aws.amazon.com/bedrock',
+        usecase: 'Casual(결과 요약) → Regular(콤보 분석) → Hardcore(포지셔닝) → Analyst(시야·가치)',
+        note: 'RAG 소스: pgvectorscale에서 유사 과거 한타 top-3 검색 → 구체적 비교 해설 가능.',
+        tags: ['Claude API', 'RAG', '4-Level Commentary', 'WebSocket']
+      }
+    };
+
+    function showDetail(id) {
+      var data = nodeDetails[id];
+      if (!data) return;
+      // toggle
+      var panel = document.getElementById('detailPanel');
+      if (!panel.classList.contains('hidden') && document.querySelector('.node.active') && document.querySelector('.node.active').id === 'node-' + id) {
+        closeDetail(); return;
+      }
+      // deactivate all
+      document.querySelectorAll('.node').forEach(function(n) { n.classList.remove('active'); });
+      document.getElementById('node-' + id).classList.add('active');
+      document.getElementById('detailTitle').textContent = data.title;
+      var tags = data.tags.map(function(t) { return '<span class="detail-tag">' + t + '</span>'; }).join('');
+      document.getElementById('detailBody').innerHTML =
+        '<div class="detail-grid">' +
+          '<div class="detail-item"><label>역할</label><p>' + data.role + '</p></div>' +
+          '<div class="detail-item"><label>엔드포인트 / 서비스</label><p>' + data.url + '</p></div>' +
+          '<div class="detail-item" style="grid-column:1/-1"><label>설명</label><p>' + data.desc + '</p></div>' +
+          '<div class="detail-item"><label>활용</label><p>' + data.usecase + '</p></div>' +
+          '<div class="detail-item"><label>주의사항</label><p>' + data.note + '</p></div>' +
+        '</div>' +
+        '<div class="detail-tags">' + tags + '</div>';
+      panel.classList.remove('hidden');
+      panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    function closeDetail() {
+      document.getElementById('detailPanel').classList.add('hidden');
+      document.querySelectorAll('.node').forEach(function(n) { n.classList.remove('active'); });
+    }
+
+    // === CHARTS ===
+    var chartsBuilt = false;
+
+    function buildCharts() {
+      if (chartsBuilt || typeof Chart === 'undefined') return;
+      var isDark = document.documentElement.classList.contains('theme-dark');
+      var textColor = isDark ? '#EDEDED' : '#0f172a';
+      var textSec = isDark ? '#777' : '#64748b';
+      var gridColor = isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.06)';
+      var accent = isDark ? '#00c2ff' : '#2563eb';
+      var positive = isDark ? '#10b981' : '#059669';
+      var warning = isDark ? '#f59e0b' : '#d97706';
+
+      // WIN PROBABILITY
+      var c1 = document.getElementById('winProbChart');
+      if (c1) {
+        if (window._chart1) { try { window._chart1.destroy(); } catch(e){} }
+        window._chart1 = new Chart(c1, {
+          type: 'line',
+          data: {
+            labels: ['0–10분', '10–20분', '20–30분', '30분+'],
+            datasets: [
+              {
+                label: 'AUC (EXP004)',
+                data: [70.4, 87.7, 90.4, 88.5],
+                borderColor: accent, backgroundColor: accent + '18',
+                borderWidth: 2.5, pointRadius: 4, pointHoverRadius: 6,
+                fill: true, tension: 0.4
+              }
+            ]
+          },
+          options: {
+            responsive: true, maintainAspectRatio: false,
+            animation: false,
+            plugins: {
+              tooltip: { enabled: true, padding: 10, cornerRadius: 8,
+                callbacks: { label: function(ctx) { return ' 정확도 ' + ctx.raw + '%'; } }
+              },
+              legend: { display: false }
+            },
+            scales: {
+              x: { ticks: { color: textSec, font: { size: 11 } }, grid: { color: gridColor } },
+              y: {
+                ticks: { color: textSec, font: { size: 11 }, callback: function(v) { return v + '%'; } },
+                grid: { color: gridColor }, min: 60, max: 95
+              }
+            },
+            layout: { padding: { top: 8, right: 8, bottom: 4, left: 4 } }
+          }
+        });
+      }
+
+      // PGVECTORSCALE PERF
+      var c2 = document.getElementById('vectorPerfChart');
+      if (c2) {
+        if (window._chart2) { try { window._chart2.destroy(); } catch(e){} }
+        window._chart2 = new Chart(c2, {
+          type: 'bar',
+          data: {
+            labels: ['ANN 검색 속도', '메모리 효율', '인덱스 빌드', '처리량(QPS)'],
+            datasets: [
+              {
+                label: 'pgvector (기준 1x)',
+                data: [1, 1, 1, 1],
+                backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.12)',
+                borderRadius: 4,
+              },
+              {
+                label: 'pgvectorscale',
+                data: [23, 10, 5, 18],
+                backgroundColor: isDark ? 'rgba(139,92,246,0.6)' : 'rgba(124,58,237,0.55)',
+                borderRadius: 4,
+              }
+            ]
+          },
+          options: {
+            responsive: true, maintainAspectRatio: false,
+            animation: false,
+            plugins: {
+              tooltip: { enabled: true, padding: 10, cornerRadius: 8,
+                callbacks: { label: function(ctx) { return ' ' + ctx.dataset.label + ': ' + ctx.raw + 'x'; } }
+              },
+              legend: { labels: { color: textSec, font: { size: 11 }, boxWidth: 12 }, position: 'top' }
+            },
+            scales: {
+              x: { ticks: { color: textSec, font: { size: 11 } }, grid: { color: gridColor } },
+              y: {
+                ticks: { color: textSec, font: { size: 11 }, callback: function(v) { return v + 'x'; } },
+                grid: { color: gridColor }
+              }
+            },
+            layout: { padding: { top: 4, right: 8, bottom: 4, left: 4 } }
+          }
+        });
+      }
+
+      chartsBuilt = true;
+    }
+
+    function onThemeChange() {
+      chartsBuilt = false;
+      setTimeout(buildCharts, 120);
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+      setTimeout(buildCharts, 200);
+    });
+    window.addEventListener('load', buildCharts);
+  </script>
+</body>
+</html>
