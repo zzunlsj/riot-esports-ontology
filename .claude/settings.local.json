@@ -1,0 +1,32 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -E \"\\\\.\\(md|json|yaml|yml|owl|ttl|py\\)$\")",
+      "Bash(obsidian read *)",
+      "Bash(python3 -c \"import ast; ast.parse\\(open\\('/Users/charleschang/Documents/개인폴더/obsidian-vault/1-projects/riot-esports-ontology/scraper/scripts/pipeline/setup_counters_index.py'\\).read\\(\\)\\); print\\('✓ Syntax OK'\\)\")",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(python -m pytest tests/test_load_counters.py -v)",
+      "Bash(python -m pytest tests/test_matchup_analyzer.py -v)",
+      "Bash(python -c \"import ast; ast.parse\\(open\\('scripts/realtime/live_stats_receiver.py'\\).read\\(\\)\\); print\\('syntax OK'\\)\")",
+      "Bash(python -m pytest tests/ -v)",
+      "Bash(python -m pytest tests/test_teamfight_detector.py tests/test_matchup_analyzer.py -v)",
+      "Bash(python -c ' *)",
+      "Bash(python -m scripts.pipeline.load_counters --help)",
+      "Bash(docker exec *)",
+      "Bash(grep -v \"^$\")",
+      "Bash(python3 -c ' *)",
+      "Skill(update-config)",
+      "Skill(update-config:*)",
+      "Bash(pip show *)",
+      "Bash(npm list *)",
+      "Bash(browser-use doctor *)",
+      "Bash(python -m browser_use doctor)",
+      "Bash(pip install *)",
+      "Bash(browser-use login *)",
+      "Bash(browser-use config *)",
+      "Bash(browser-use cloud *)",
+      "Bash(browser-use profile *)"
+    ]
+  }
+}
