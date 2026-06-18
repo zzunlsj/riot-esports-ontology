@@ -1,0 +1,8 @@
+[
+  "scraper/tests/test_teamfight_detector.py::test_predict_exposes_rule_and_model_scores",
+  "scraper/tests/test_teamfight_detector.py::test_predict_returns_alert",
+  "scraper/tests/test_teamfight_detector.py::test_rule1_detects_cluster",
+  "scraper/tests/test_teamfight_detector.py::test_rule1_no_cluster",
+  "scraper/tests/test_teamfight_detector.py::test_rule3_events_expire_by_game_time",
+  "scraper/tests/test_teamfight_detector.py::test_rule3_ward_threshold"
+]
